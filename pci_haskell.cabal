@@ -1,0 +1,26 @@
+-- Description:
+Name:           pci-haskell
+Version:        0.1
+Synopsis:       Some Machine Learning code from "Programming Collective Intelligence"
+-- Copyright:
+License:        BSD3
+-- Other
+Author:         Phillip Mates
+Maintainer:     phillipmates@gmail.com
+Homepage:       http://eng.utah.edu/~mates
+
+Category:       Data
+Build-type:     Simple
+
+Cabal-Version:  >= 1.2
+
+Library
+  HS-Source-Dirs: src
+  Exposed-modules:
+  Build-Depends:  base == 4.3.*
+                , containers
+
+Executable recommend
+  Main-Is: Main.hs
+  Hs-source-dirs: src
+  Ghc-Options: -Wall
