@@ -1,5 +1,5 @@
-import Data.Maybe (catMaybes)
-import Data.List (intersect, sortBy)
+import Data.Maybe (catMaybes, isNothing)
+import Data.List (intersect, sortBy, (\\))
 import Data.Ord (comparing)
 
 main :: IO ()
@@ -98,16 +98,67 @@ simPearson prefs person1 person2 =
 topMatches :: [Critic] -> String -> Int -> ([Critic] -> String -> String -> Maybe Float) -> [(Float, String)]
 topMatches prefs person n simFunc =
   take n $ reverse $ sortBy (comparing fst) matches
-  where matches = topMatches' prefs person simFunc
 
--- unsorted matches
-topMatches' :: [Critic] -> String -> ([Critic] -> String -> String -> Maybe Float) -> [(Float, String)]
-topMatches' (p:ps) person simFunc =
-  if cName /= person
-     then case simFunc (p:ps) person cName of
-               Just rating -> (rating, cName) : topMatches' ps person simFunc
-               Nothing -> topMatches' ps person simFunc
-     else topMatches' ps person simFunc
-  where Critic cName _ = p
-topMatches' []  _ _ = []
+  where
+    matches = catMaybes $ map compMatch prefs
 
+    compMatch :: Critic -> Maybe (Float, String)
+    compMatch (Critic other _) =
+      if other /= person
+         then case simFunc prefs person other of
+                   Just rating -> Just (rating, other)
+                   Nothing -> Nothing
+         else Nothing
+
+-- Gets recommendations for a person by using a weighted average
+-- of every other user's rankings
+getRecommendations :: [Critic] -> String -> ([Critic] -> String -> String -> Maybe Float) -> [(Float, String)]
+getRecommendations prefs person simFunc =
+  reverse $ sortBy (comparing fst) matches
+  where
+    matches = catMaybes $ map compRec prefs
+
+    -- compute totals and sum of simularities
+    compRec :: Critic -> Maybe [(String, Float, Float)]
+    compRec (Critic other _) =
+      if other /= person
+         then case simFunc prefs person other of
+                   Just rating -> if rating <= 0.0
+                                 -- ignore scores of zero or lower
+                                 then Nothing
+                                 else zipWith initDict ((map foo unscoredItems
+                   Nothing -> Nothing
+         else Nothing
+      where otherPrefs = maybe [] (\(Critic _ x) -> x) $ getCritic prefs other
+            personPrefs = maybe [] (\(Critic _ x) -> x) $ getCritic prefs person
+            -- drop items scored 0
+            personPrefs' = filter (\(_, x) -> if x == 0.0 then False else True) personPrefs
+            -- items that person hasn't scored yet
+            unscoredItems = otherPrefs \\ personPrefs'
+            foo :: (String, Float) -> (String, Float, Float)
+
+{-
+def getRecommendations(prefs,person,similarity=sim_pearson):
+  totals={}
+  simSums={}
+  for other in prefs:
+    # don't compare me to myself
+    if other==person: continue
+
+    sim=similarity(prefs,person,other)
+    # ignore scores of zero or lower
+    if sim<=0: continue
+
+    for item in prefs[other]:
+      # only score movies I haven't seen yet
+      if item not in prefs[person] or prefs[person][item]==0:
+        # Similarity * Score
+        totals.setdefault(item,0)
+        totals[item]+=prefs[other][item]*sim
+        # Sum of similarities
+        simSums.setdefault(item,0)
+        simSums[item]+=sim
+
+  # Create the normalized list
+  rankings=[(total/simSums[item],item) for item,total in totals.items( )]
+-}
