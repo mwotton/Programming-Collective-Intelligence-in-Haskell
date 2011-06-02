@@ -9,6 +9,8 @@ main = do putStrLn "Top Matches from Pearson Simularity with Toby"
           putStrLn $ show $ simDistance critics "Lisa Rose" "Gene Seymour"
           putStrLn "\nPearson Distance between Lisa Rose and Gene Seymour"
           putStrLn $ show $ simPearson critics "Lisa Rose" "Gene Seymour"
+          putStrLn "\nRecommendations for Toby"
+          putStrLn $ show $ getRecommendations critics "Toby" simPearson
 
 
 data Critic = Critic String [(String, Float)]
@@ -114,17 +116,21 @@ topMatches prefs person n simFunc =
 -- of every other user's rankings
 getRecommendations :: [Critic] -> String -> ([Critic] -> String -> String -> Maybe Float) -> [(Float, String)]
 getRecommendations prefs person simFunc =
-  reverse $ sortBy (comparing fst) matches
+  reverse $ sortBy (comparing fst) ranking
   where
-    matches = foldr initDict (map mergeRecDict) unMergedMatches
+    ranking = map (\(name, total, simSum) -> (total/simSum, name)) matches
+
+    matches = foldr mergeRecDict initDict unMergedMatches
+    initDict = map (\(Critic x _) -> (x, 0.0, 0.0)) unscoredItems
+
     unMergedMatches = catMaybes $ map compRec prefs
 
-    -- merge
-    mergeRecDict :: (String, Float, Float) -> [(String, Float, Float)] -> (String, Float, Float)
-    mergeRecDict (name, total, simSum) personPrefs =
-      case lookup name personPrefs of
-           Just (_, t, s) -> (name, total+t, simSum+s)
-           Nothing -> (name, total, simSum)
+    -- items that person hasn't scored yet
+    unscoredItems = filter (\(Critic x _) -> if x `elem` (map fst personsRated) then False else True) prefs
+    personsRatings = maybe [] (\(Critic _ x) -> x) $ getCritic prefs person
+    -- drop items scored 0
+    personsRated = filter (\(_, x) -> if x == 0.0 then False else True) personsRatings
+
 
     -- compute totals and sum of simularities
     compRec :: Critic -> Maybe [(String, Float, Float)]
@@ -134,20 +140,29 @@ getRecommendations prefs person simFunc =
                    Just rating -> if rating <= 0.0
                                  -- ignore scores of zero or lower
                                  then Nothing
-                                 else (other, rating*, rating)
+                                 else Just $ map (\(itemName, otherRating) 
+                                                -> (itemName, otherRating*rating, rating)) 
+                                                unscoredOtherItems
                    Nothing -> Nothing
          else Nothing
-      where otherPrefs = maybe [] (\(Critic _ x) -> x) $ getCritic prefs other
-            personPrefs = maybe [] (\(Critic _ x) -> x) $ getCritic prefs person
-            -- drop items scored 0
-            personPrefs' = filter (\(_, x) -> if x == 0.0 then False else True) personPrefs
-            -- items that person hasn't scored yet
-            unscoredItems = filter (\(x, _) -> if x `elem` personPrefs' then False else True) otherPrefs
+      where otherPersonsRatings = maybe [] (\(Critic _ x) -> x) $ getCritic prefs other
+            unscoredOtherItems = filter (\(x, _) -> if x `elem` (map fst personsRated)
+                                                       then False
+                                                       else True) otherPersonsRatings
 
-            initDict = map (\(x, _, _) -> (x, 0.0, 0.0)) unscoredItems
+-- merge
+mergeRecDict :: [(String, Float, Float)] -> [(String, Float, Float)] -> [(String, Float, Float)]
+mergeRecDict ((name, total, simSum):rs) personsRatings =
+  case lookup' name personsRatings of
+       Just (t, s) -> (name, total+t, simSum+s) : mergeRecDict rs personsRatings
+       Nothing -> (name, total, simSum) : mergeRecDict rs personsRatings
+mergeRecDict [] _ = []
 
-            foo :: 
-
+lookup'                  :: (Eq a) => a -> [(a,b,c)] -> Maybe (b,c)
+lookup' _key []          =  Nothing
+lookup'  key ((x,y,z):xys)
+    | key == x          =  Just (y,z)
+    | otherwise         =  lookup' key xys
 
 {-
 def getRecommendations(prefs,person,similarity=sim_pearson):
