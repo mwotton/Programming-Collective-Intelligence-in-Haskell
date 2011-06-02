@@ -17,7 +17,7 @@ Cabal-Version:  >= 1.2
 Library
   HS-Source-Dirs: src
   Exposed-modules:
-  Build-Depends:  base == 4.3.*
+  Build-Depends:  base == 4.2.*
                 , containers
 
 Executable recommend
