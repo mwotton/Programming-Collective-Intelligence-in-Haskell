@@ -116,7 +116,15 @@ getRecommendations :: [Critic] -> String -> ([Critic] -> String -> String -> May
 getRecommendations prefs person simFunc =
   reverse $ sortBy (comparing fst) matches
   where
-    matches = catMaybes $ map compRec prefs
+    matches = foldr initDict (map mergeRecDict) unMergedMatches
+    unMergedMatches = catMaybes $ map compRec prefs
+
+    -- merge
+    mergeRecDict :: (String, Float, Float) -> [(String, Float, Float)] -> (String, Float, Float)
+    mergeRecDict (name, total, simSum) personPrefs =
+      case lookup name personPrefs of
+           Just (_, t, s) -> (name, total+t, simSum+s)
+           Nothing -> (name, total, simSum)
 
     -- compute totals and sum of simularities
     compRec :: Critic -> Maybe [(String, Float, Float)]
@@ -126,7 +134,7 @@ getRecommendations prefs person simFunc =
                    Just rating -> if rating <= 0.0
                                  -- ignore scores of zero or lower
                                  then Nothing
-                                 else zipWith initDict ((map foo unscoredItems
+                                 else (other, rating*, rating)
                    Nothing -> Nothing
          else Nothing
       where otherPrefs = maybe [] (\(Critic _ x) -> x) $ getCritic prefs other
@@ -134,8 +142,12 @@ getRecommendations prefs person simFunc =
             -- drop items scored 0
             personPrefs' = filter (\(_, x) -> if x == 0.0 then False else True) personPrefs
             -- items that person hasn't scored yet
-            unscoredItems = otherPrefs \\ personPrefs'
-            foo :: (String, Float) -> (String, Float, Float)
+            unscoredItems = filter (\(x, _) -> if x `elem` personPrefs' then False else True) otherPrefs
+
+            initDict = map (\(x, _, _) -> (x, 0.0, 0.0)) unscoredItems
+
+            foo :: 
+
 
 {-
 def getRecommendations(prefs,person,similarity=sim_pearson):
