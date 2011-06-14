@@ -1,5 +1,5 @@
 import Data.Maybe (catMaybes, isNothing)
-import Data.List (intersect, sortBy, (\\))
+import Data.List (intersect, sortBy, delete, (\\))
 import Data.Ord (comparing)
 
 main :: IO ()
@@ -118,30 +118,26 @@ getRecommendations :: [Critic] -> String -> ([Critic] -> String -> String -> May
 getRecommendations prefs person simFunc =
   reverse $ sortBy (comparing fst) ranking
   where
-    ranking = map (\(name, total, simSum) -> (total/simSum, name)) matches
+    ranking = map (\(name, (total, simSum)) -> (total/simSum, name)) matches
 
-    matches = foldr mergeRecDict initDict unMergedMatches
-    initDict = map (\(Critic x _) -> (x, 0.0, 0.0)) unscoredItems
+    matches = foldr mergeRecDict [] unMergedMatches
 
     unMergedMatches = catMaybes $ map compRec prefs
 
-    -- items that person hasn't scored yet
-    unscoredItems = filter (\(Critic x _) -> if x `elem` (map fst personsRated) then False else True) prefs
-    personsRatings = maybe [] (\(Critic _ x) -> x) $ getCritic prefs person
     -- drop items scored 0
     personsRated = filter (\(_, x) -> if x == 0.0 then False else True) personsRatings
-
+    personsRatings = maybe [] (\(Critic _ x) -> x) $ getCritic prefs person
 
     -- compute totals and sum of simularities
-    compRec :: Critic -> Maybe [(String, Float, Float)]
+    compRec :: Critic -> Maybe [(String, (Float, Float))]
     compRec (Critic other _) =
       if other /= person
          then case simFunc prefs person other of
                    Just rating -> if rating <= 0.0
                                  -- ignore scores of zero or lower
                                  then Nothing
-                                 else Just $ map (\(itemName, otherRating) 
-                                                -> (itemName, otherRating*rating, rating)) 
+                                 else Just $ map (\(itemName, otherRating)
+                                                -> (itemName, (otherRating*rating, rating)))
                                                 unscoredOtherItems
                    Nothing -> Nothing
          else Nothing
@@ -151,41 +147,14 @@ getRecommendations prefs person simFunc =
                                                        else True) otherPersonsRatings
 
 -- merge
-mergeRecDict :: [(String, Float, Float)] -> [(String, Float, Float)] -> [(String, Float, Float)]
-mergeRecDict ((name, total, simSum):rs) personsRatings =
-  case lookup' name personsRatings of
-       Just (t, s) -> (name, total+t, simSum+s) : mergeRecDict rs personsRatings
-       Nothing -> (name, total, simSum) : mergeRecDict rs personsRatings
-mergeRecDict [] _ = []
+mergeRecDict :: [(String, (Float, Float))] -> [(String, (Float, Float))] -> [(String, (Float, Float))]
+mergeRecDict leftRatings@(l:ls) rightRatings = mergeRecDict' leftRatings rightRatings
+mergeRecDict [] l@(x:xs) = l
+mergeRecDict [] [] = []
 
-lookup'                  :: (Eq a) => a -> [(a,b,c)] -> Maybe (b,c)
-lookup' _key []          =  Nothing
-lookup'  key ((x,y,z):xys)
-    | key == x          =  Just (y,z)
-    | otherwise         =  lookup' key xys
-
-{-
-def getRecommendations(prefs,person,similarity=sim_pearson):
-  totals={}
-  simSums={}
-  for other in prefs:
-    # don't compare me to myself
-    if other==person: continue
-
-    sim=similarity(prefs,person,other)
-    # ignore scores of zero or lower
-    if sim<=0: continue
-
-    for item in prefs[other]:
-      # only score movies I haven't seen yet
-      if item not in prefs[person] or prefs[person][item]==0:
-        # Similarity * Score
-        totals.setdefault(item,0)
-        totals[item]+=prefs[other][item]*sim
-        # Sum of similarities
-        simSums.setdefault(item,0)
-        simSums[item]+=sim
-
-  # Create the normalized list
-  rankings=[(total/simSums[item],item) for item,total in totals.items( )]
--}
+mergeRecDict' :: [(String, (Float, Float))] -> [(String, (Float, Float))] -> [(String, (Float, Float))]
+mergeRecDict' ((name, (total, simSum)):rs) personsRatings =
+  case lookup name personsRatings of
+       Just (t, s) -> (name, (total+t, simSum+s)) : mergeRecDict' rs (delete (name, (t, s)) personsRatings)
+       Nothing -> (name, (total, simSum)) : mergeRecDict' rs personsRatings
+mergeRecDict' [] rest = rest
